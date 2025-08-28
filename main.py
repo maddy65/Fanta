@@ -1,83 +1,56 @@
-import os
-import subprocess
-from pathlib import Path
 import argparse
+import os
+import json
+import joblib
 
-# Import rules
-from rules.line_length_rule import LineLengthRule
-from rules.naming_convention_rule import NamingConventionRule
-from rules.comment_rule import CommentRule
+from scanner.rule_loader import load_rules
+from scanner.project_scanner import scan_project
+from scanner.report_generator import generate_report
+from constants import DEFAULT_PROJECT_PATH, DEFAULT_OUTPUT_PATH
 
-# -------------------------------
-# Utility to get git-changed files
-# -------------------------------
-def get_changed_files(project_path):
-    try:
-        result = subprocess.run(
-            ["git", "status", "--porcelain"],
-            cwd=project_path,
-            capture_output=True,
-            text=True,
-            check=True
-        )
-        changed = []
-        for line in result.stdout.splitlines():
-            status, file = line[:2], line[3:]
-            # M = modified, A = added, AM = added+modified, etc.
-            if file.endswith(".java") and status.strip() in {"M", "A", "AM"}:
-                changed.append(os.path.join(project_path, file))
-        return changed
-    except Exception as e:
-        print(f"[WARN] Could not get git changes: {e}")
-        return []
+MODEL_PATH = "model/model.pkl"
 
-# -------------------------------
-# Main execution
-# -------------------------------
 def main():
-    parser = argparse.ArgumentParser(description="Java Code Review Tool")
+    parser = argparse.ArgumentParser(description="AI-powered Code Review Tool (MVP)")
     parser.add_argument(
         "--project",
-        default=constants.DEFAULT_PROJECT_PATH,
-        help="Path to project source code"
+        default=DEFAULT_PROJECT_PATH,
+        help=f"Path to project source code (default: {DEFAULT_PROJECT_PATH})"
+    )
+    parser.add_argument(
+        "--output",
+        default=DEFAULT_OUTPUT_PATH,
+        help=f"Path to save report (default: {DEFAULT_OUTPUT_PATH})"
     )
     parser.add_argument(
         "--delta",
         action="store_true",
-        help="Run only on git-modified Java files"
+        help="Run only on git delta (changed files)"
     )
-
     args = parser.parse_args()
-    project_path = args.project
 
-    # Choose file set
-    if args.delta:
-        print("[INFO] Running in DELTA mode (only changed .java files)")
-        java_files = get_changed_files(project_path)
+    print("🔍 Loading rules...")
+    rules = load_rules("rules/rules.md")
+
+    model = None
+    if os.path.exists(MODEL_PATH):
+        print("🤖 Loading trained model...")
+        model = joblib.load(MODEL_PATH)
     else:
-        print("[INFO] Running on FULL project scan")
-        java_files = list(Path(project_path).rglob("*.java"))
+        print("⚠️  No trained model found. Skipping AI checks.")
 
-    if not java_files:
-        print("[INFO] No Java files found to analyze.")
-        return
+    print("📂 Scanning project:", args.project)
+    scan_results = scan_project(args.project, rules, model, delta=args.delta)
 
-    # Initialize rules
-    rules = [
-        LineLengthRule(max_length=120),
-        NamingConventionRule(),
-        CommentRule(min_comment_ratio=0.05)
-    ]
+    print("📝 Generating report...")
+    report = generate_report(scan_results)
 
-    # Run checks
-    for file_path in java_files:
-        print(f"\nAnalyzing: {file_path}")
-        with open(file_path, "r", encoding="utf-8") as f:
-            content = f.read()
-            for rule in rules:
-                issues = rule.check(content)
-                for issue in issues:
-                    print(f"  [ISSUE] {issue}")
+    os.makedirs(os.path.dirname(args.output), exist_ok=True)
+    with open(args.output, "w") as f:
+        json.dump(report, f, indent=2)
+
+    print(f"✅ Report saved at {args.output}")
+
 
 if __name__ == "__main__":
     main()
