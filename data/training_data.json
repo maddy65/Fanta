@@ -1,0 +1,11 @@
+[
+    {
+      "code": "def add(a, b): return a + b",
+      "label": "clean"
+    },
+    {
+      "code": "def add(a, b): print('debug'); return a+b",
+      "label": "violation"
+    }
+  ]
+  
