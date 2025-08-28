@@ -1,0 +1,33 @@
+# service/report_to_pdf.py
+import json
+from reportlab.lib.pagesizes import letter
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet
+
+def json_to_pdf(json_file, pdf_file):
+    # Load JSON
+    with open(json_file, "r") as f:
+        data = json.load(f)
+
+    # Create PDF
+    doc = SimpleDocTemplate(pdf_file, pagesize=letter)
+    styles = getSampleStyleSheet()
+    elements = []
+
+    elements.append(Paragraph("<b>Code Review Report</b>", styles["Title"]))
+    elements.append(Spacer(1, 20))
+
+    for issue in data.get("issues", []):
+        elements.append(Paragraph(f"<b>File:</b> {issue['file']}", styles["Normal"]))
+        elements.append(Paragraph(f"<b>Line:</b> {issue['line']}", styles["Normal"]))
+        elements.append(Paragraph(f"<b>Violation:</b> {issue['violation']}", styles["Normal"]))
+        elements.append(Paragraph(f"<b>Snippet:</b><br/><pre>{issue['snippet']}</pre>", styles["Normal"]))
+        elements.append(Spacer(1, 15))
+
+    doc.build(elements)
+    print(f"✅ PDF report generated: {pdf_file}")
+
+
+if __name__ == "__main__":
+    # Example usage
+    json_to_pdf("output/report.json", "output/report.pdf")
